@@ -41,6 +41,45 @@ public class LdapQueryBuilderTests {
 	}
 
 	@Test
+	public void buildWithMultipleBases() {
+		LdapQuery result = LdapQueryBuilder.query().base("ou=users", "ou=sa").where("cn").is("John Doe");
+
+		assertThat(result.base()).isEqualTo(LdapUtils.newLdapName("ou=users"));
+		assertThat(result.bases()).containsExactly(LdapUtils.newLdapName("ou=users"), LdapUtils.newLdapName("ou=sa"));
+	}
+
+	@Test
+	public void buildWithMultipleBaseNames() {
+		LdapQuery result = LdapQueryBuilder.query()
+			.base(LdapUtils.newLdapName("ou=users"), LdapUtils.newLdapName("ou=sa"))
+			.where("cn")
+			.is("John Doe");
+
+		assertThat(result.bases()).containsExactly(LdapUtils.newLdapName("ou=users"), LdapUtils.newLdapName("ou=sa"));
+	}
+
+	@Test
+	public void buildWithSingleBaseHasSingleBases() {
+		LdapQuery result = LdapQueryBuilder.query().base("ou=users").where("cn").is("John Doe");
+
+		assertThat(result.bases()).containsExactly(LdapUtils.newLdapName("ou=users"));
+	}
+
+	@Test
+	public void buildWithNoBasesFails() {
+		assertThatExceptionOfType(IllegalArgumentException.class)
+			.isThrownBy(() -> LdapQueryBuilder.query().base(new String[0]));
+	}
+
+	@Test
+	public void fromQueryCopiesMultipleBases() {
+		LdapQuery original = LdapQueryBuilder.query().base("ou=users", "ou=sa").where("cn").is("John Doe");
+
+		assertThat(LdapQueryBuilder.fromQuery(original).bases()).containsExactly(LdapUtils.newLdapName("ou=users"),
+				LdapUtils.newLdapName("ou=sa"));
+	}
+
+	@Test
 	public void buildGreaterThanOrEquals() {
 		LdapQuery result = LdapQueryBuilder.query().where("cn").gte("John Doe");
 

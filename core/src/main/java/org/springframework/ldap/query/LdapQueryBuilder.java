@@ -17,6 +17,8 @@
 package org.springframework.ldap.query;
 
 import java.text.MessageFormat;
+import java.util.Arrays;
+import java.util.List;
 import java.util.function.Consumer;
 
 import javax.naming.Name;
@@ -63,7 +65,7 @@ import org.springframework.util.Assert;
  */
 public final class LdapQueryBuilder implements LdapQuery {
 
-	private Name base = LdapUtils.emptyLdapName();
+	private List<Name> bases = List.of(LdapUtils.emptyLdapName());
 
 	private @Nullable SearchScope searchScope = null;
 
@@ -105,7 +107,7 @@ public final class LdapQueryBuilder implements LdapQuery {
 	public static LdapQueryBuilder fromQuery(LdapQuery query) {
 		LdapQueryBuilder builder = new LdapQueryBuilder();
 		builder.rootContainer = new DefaultContainerCriteria(builder).append(query.filter());
-		builder.base(query.base());
+		builder.base(query.bases().toArray(Name[]::new));
 		setIfNonNull(builder::attributes, query.attributes());
 		setIfNonNull(builder::countLimit, query.countLimit());
 		setIfNonNull(builder::searchScope, query.searchScope());
@@ -127,7 +129,21 @@ public final class LdapQueryBuilder implements LdapQuery {
 	 */
 	public LdapQueryBuilder base(String baseDn) {
 		assertFilterNotStarted();
-		this.base = LdapUtils.newLdapName(baseDn);
+		this.bases = List.of(LdapUtils.newLdapName(baseDn));
+		return this;
+	}
+
+	/**
+	 * Set several base search paths for the query. The query is executed against each of
+	 * them in turn, and the results are combined in that order.
+	 * @param baseDns the base search paths.
+	 * @return this instance.
+	 * @since 4.2
+	 */
+	public LdapQueryBuilder base(String... baseDns) {
+		assertFilterNotStarted();
+		Assert.notEmpty(baseDns, "baseDns must not be empty");
+		this.bases = Arrays.stream(baseDns).<Name>map(LdapUtils::newLdapName).toList();
 		return this;
 	}
 
@@ -139,7 +155,21 @@ public final class LdapQueryBuilder implements LdapQuery {
 	 */
 	public LdapQueryBuilder base(Name baseDn) {
 		assertFilterNotStarted();
-		this.base = LdapUtils.newLdapName(baseDn);
+		this.bases = List.of(LdapUtils.newLdapName(baseDn));
+		return this;
+	}
+
+	/**
+	 * Set several base search paths for the query. The query is executed against each of
+	 * them in turn, and the results are combined in that order.
+	 * @param baseDns the base search paths.
+	 * @return this instance.
+	 * @since 4.2
+	 */
+	public LdapQueryBuilder base(Name... baseDns) {
+		assertFilterNotStarted();
+		Assert.notEmpty(baseDns, "baseDns must not be empty");
+		this.bases = Arrays.stream(baseDns).<Name>map(LdapUtils::newLdapName).toList();
 		return this;
 	}
 
@@ -257,7 +287,12 @@ public final class LdapQueryBuilder implements LdapQuery {
 
 	@Override
 	public Name base() {
-		return this.base;
+		return this.bases.get(0);
+	}
+
+	@Override
+	public List<Name> bases() {
+		return this.bases;
 	}
 
 	@Override

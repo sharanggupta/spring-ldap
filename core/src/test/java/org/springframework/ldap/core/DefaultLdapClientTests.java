@@ -161,6 +161,79 @@ public class DefaultLdapClientTests {
 	}
 
 	@Test
+	public void testSearch_MultipleBases_CombinesResults() throws Exception {
+		expectGetReadOnlyContext();
+		Name users = LdapUtils.newLdapName("ou=users");
+		Name serviceAccounts = LdapUtils.newLdapName("ou=sa");
+		NamingEnumeration<SearchResult> usersResults = mock(NamingEnumeration.class);
+		NamingEnumeration<SearchResult> serviceAccountsResults = mock(NamingEnumeration.class);
+		given(this.dirContextMock.search(eq(users), eq("(ou=somevalue)"), any())).willReturn(usersResults);
+		given(this.dirContextMock.search(eq(serviceAccounts), eq("(ou=somevalue)"), any()))
+			.willReturn(serviceAccountsResults);
+		given(usersResults.hasMore()).willReturn(true, false);
+		given(usersResults.next()).willReturn(new SearchResult("cn=one", new Object(), new BasicAttributes()));
+		given(serviceAccountsResults.hasMore()).willReturn(true, false);
+		given(serviceAccountsResults.next())
+			.willReturn(new SearchResult("cn=two", new Object(), new BasicAttributes()));
+		given(this.contextMapperMock.mapFromContext(any())).willReturn("one", "two");
+
+		List<Object> result = this.tested.search()
+			.query((builder) -> builder.base(users, serviceAccounts).filter("(ou=somevalue)"))
+			.toList(this.contextMapperMock);
+
+		assertThat(result).containsExactly("one", "two");
+		verify(usersResults).close();
+		verify(serviceAccountsResults).close();
+		verify(this.dirContextMock).close();
+	}
+
+	@Test
+	public void testSearch_MultipleBases_ToObjectFindsTheSingleResult() throws Exception {
+		expectGetReadOnlyContext();
+		Name users = LdapUtils.newLdapName("ou=users");
+		Name serviceAccounts = LdapUtils.newLdapName("ou=sa");
+		NamingEnumeration<SearchResult> usersResults = mock(NamingEnumeration.class);
+		NamingEnumeration<SearchResult> serviceAccountsResults = mock(NamingEnumeration.class);
+		given(this.dirContextMock.search(eq(users), eq("(ou=somevalue)"), any())).willReturn(usersResults);
+		given(this.dirContextMock.search(eq(serviceAccounts), eq("(ou=somevalue)"), any()))
+			.willReturn(serviceAccountsResults);
+		given(usersResults.hasMore()).willReturn(false);
+		given(serviceAccountsResults.hasMore()).willReturn(true, false);
+		given(serviceAccountsResults.next())
+			.willReturn(new SearchResult("cn=two", new Object(), new BasicAttributes()));
+		given(this.contextMapperMock.mapFromContext(any())).willReturn("two");
+
+		Object result = this.tested.search()
+			.query((builder) -> builder.base(users, serviceAccounts).filter("(ou=somevalue)"))
+			.toObject(this.contextMapperMock);
+
+		assertThat(result).isEqualTo("two");
+		verify(this.dirContextMock).close();
+	}
+
+	@Test
+	public void testSearch_MultipleBases_ToObjectRejectsResultsInSeveralBases() throws Exception {
+		expectGetReadOnlyContext();
+		Name users = LdapUtils.newLdapName("ou=users");
+		Name serviceAccounts = LdapUtils.newLdapName("ou=sa");
+		NamingEnumeration<SearchResult> usersResults = mock(NamingEnumeration.class);
+		NamingEnumeration<SearchResult> serviceAccountsResults = mock(NamingEnumeration.class);
+		given(this.dirContextMock.search(eq(users), eq("(ou=somevalue)"), any())).willReturn(usersResults);
+		given(this.dirContextMock.search(eq(serviceAccounts), eq("(ou=somevalue)"), any()))
+			.willReturn(serviceAccountsResults);
+		given(usersResults.hasMore()).willReturn(true, false);
+		given(usersResults.next()).willReturn(new SearchResult("cn=one", new Object(), new BasicAttributes()));
+		given(serviceAccountsResults.hasMore()).willReturn(true, false);
+		given(serviceAccountsResults.next())
+			.willReturn(new SearchResult("cn=two", new Object(), new BasicAttributes()));
+
+		assertThatExceptionOfType(IncorrectResultSizeDataAccessException.class).isThrownBy(() -> this.tested.search()
+			.query((builder) -> builder.base(users, serviceAccounts).filter("(ou=somevalue)"))
+			.toObject(this.contextMapperMock));
+		verify(this.dirContextMock).close();
+	}
+
+	@Test
 	public void testSearch_StringBase_CallbackHandler() throws Exception {
 		expectGetReadOnlyContext();
 

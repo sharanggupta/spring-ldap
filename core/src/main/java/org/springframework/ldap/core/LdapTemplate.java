@@ -16,6 +16,7 @@
 
 package org.springframework.ldap.core;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Spliterator;
@@ -1428,8 +1429,10 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 	 */
 	@Override
 	public <T> T searchForObject(Name base, String filter, SearchControls searchControls, ContextMapper<T> mapper) {
-		List<T> result = search(base, filter, searchControls, mapper);
+		return singleResult(search(base, filter, searchControls, mapper));
+	}
 
+	private static <T> T singleResult(List<T> result) {
 		if (result.isEmpty()) {
 			throw new EmptyResultDataAccessException(1);
 		}
@@ -1438,6 +1441,22 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 		}
 
 		return result.get(0);
+	}
+
+	/**
+	 * Execute the given search against each base of the query and combine the results in
+	 * the order of the bases.
+	 */
+	private static <T> List<T> searchEachBase(LdapQuery query, Function<Name, List<T>> search) {
+		List<Name> bases = query.bases();
+		if (bases.size() == 1) {
+			return search.apply(bases.get(0));
+		}
+		List<T> results = new ArrayList<>();
+		for (Name base : bases) {
+			results.addAll(search.apply(base));
+		}
+		return results;
 	}
 
 	/**
@@ -1454,7 +1473,9 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 	@Override
 	public void search(LdapQuery query, NameClassPairCallbackHandler callbackHandler) {
 		SearchControls searchControls = searchControlsForQuery(query, DONT_RETURN_OBJ_FLAG);
-		search(query.base(), query.filter().encode(), searchControls, callbackHandler);
+		for (Name base : query.bases()) {
+			search(base, query.filter().encode(), searchControls, callbackHandler);
+		}
 	}
 
 	/**
@@ -1464,8 +1485,7 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 	public <T> List<T> search(LdapQuery query, ContextMapper<T> mapper) {
 		SearchControls searchControls = searchControlsForQuery(query, RETURN_OBJ_FLAG);
 
-		return search(query.base(), query.filter().encode(), searchControls, mapper);
-
+		return searchEachBase(query, (base) -> search(base, query.filter().encode(), searchControls, mapper));
 	}
 
 	private SearchControls searchControlsForQuery(LdapQuery query, boolean returnObjFlag) {
@@ -1496,7 +1516,7 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 	public <T> List<T> search(LdapQuery query, AttributesMapper<T> mapper) {
 		SearchControls searchControls = searchControlsForQuery(query, DONT_RETURN_OBJ_FLAG);
 
-		return search(query.base(), query.filter().encode(), searchControls, mapper);
+		return searchEachBase(query, (base) -> search(base, query.filter().encode(), searchControls, mapper));
 	}
 
 	/**
@@ -1514,7 +1534,8 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 	public <T> T searchForObject(LdapQuery query, ContextMapper<T> mapper) {
 		SearchControls searchControls = searchControlsForQuery(query, DONT_RETURN_OBJ_FLAG);
 
-		return searchForObject(query.base(), query.filter().encode(), searchControls, mapper);
+		return singleResult(
+				searchEachBase(query, (base) -> search(base, query.filter().encode(), searchControls, mapper)));
 	}
 
 	/**
@@ -1543,21 +1564,21 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 	}
 
 	<T> Stream<T> searchForStream(LdapQuery query, Function<SearchResult, @Nullable T> mapper) {
-		Name base = query.base();
+		List<Name> bases = query.bases();
 		Filter filter = query.filter();
 		SearchControls searchControls = searchControlsForQuery(query, RETURN_OBJ_FLAG);
 		DirContext ctx = this.contextSource.getReadOnlyContext();
 		String encodedFilter = filter.encode();
 
 		if (LOG.isDebugEnabled()) {
-			LOG.debug("Searching - base={}, finalFilter={}, scope={}", base, filter, searchControls);
+			LOG.debug("Searching - bases={}, finalFilter={}, scope={}", bases, filter, searchControls);
 		}
 
 		assureReturnObjFlagSet(searchControls);
 
 		NamingEnumeration<SearchResult> results = unchecked(() -> {
-			LOG.debug("Executing search with base [{}] and filter [{}]", base, filter);
-			return ctx.search(base, encodedFilter, searchControls);
+			LOG.debug("Executing search with bases [{}] and filter [{}]", bases, filter);
+			return MultiBaseNamingEnumeration.search(bases, (base) -> ctx.search(base, encodedFilter, searchControls));
 		});
 		if (results == null) {
 			closeContextAndNamingEnumeration(ctx, null);
@@ -1756,7 +1777,7 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 	@Override
 	public <T> List<T> find(LdapQuery query, Class<T> clazz) {
 		SearchControls searchControls = searchControlsForQuery(query, RETURN_OBJ_FLAG);
-		return find(query.base(), query.filter(), searchControls, clazz);
+		return searchEachBase(query, (base) -> find(base, query.filter(), searchControls, clazz));
 	}
 
 	/**

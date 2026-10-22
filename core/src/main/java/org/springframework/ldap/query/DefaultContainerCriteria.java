@@ -17,6 +17,7 @@
 package org.springframework.ldap.query;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -112,6 +113,11 @@ class DefaultContainerCriteria implements AppendableContainerCriteria {
 	@Override
 	public Name base() {
 		return this.topQuery.base();
+	}
+
+	@Override
+	public List<Name> bases() {
+		return this.topQuery.bases();
 	}
 
 	@Override

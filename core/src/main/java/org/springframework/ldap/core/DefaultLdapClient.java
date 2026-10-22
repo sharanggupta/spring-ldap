@@ -604,7 +604,9 @@ class DefaultLdapClient implements LdapClient {
 		}
 
 		private NamingEnumeration<SearchResult> search(DirContext ctx) throws NamingException {
-			return ctx.search(this.query.base(), this.query.filter().encode(), this.controls);
+			String filter = this.query.filter().encode();
+			return MultiBaseNamingEnumeration.search(this.query.bases(),
+					(base) -> ctx.search(base, filter, this.controls));
 		}
 
 		private SearchControls searchControlsForQuery(boolean returnObjFlag) {

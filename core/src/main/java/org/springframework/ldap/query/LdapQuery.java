@@ -16,6 +16,8 @@
 
 package org.springframework.ldap.query;
 
+import java.util.List;
+
 import javax.naming.Name;
 
 import org.jspecify.annotations.Nullable;
@@ -45,6 +47,16 @@ public interface LdapQuery {
 	 * @return the search base.
 	 */
 	Name base();
+
+	/**
+	 * Get the search bases. The query is executed against each of them in turn, and the
+	 * results are combined in that order. By default, this is the single {@link #base()}.
+	 * @return the search bases, never empty.
+	 * @since 4.2
+	 */
+	default List<Name> bases() {
+		return List.of(base());
+	}
 
 	/**
 	 * Get the search scope. Default is <code>null</code>, indicating that the

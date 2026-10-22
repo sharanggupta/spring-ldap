@@ -10,7 +10,7 @@ This section covers various how to use LDAP queries with Spring LDAP.
 The `LdapQueryBuilder` and its associated classes are intended to support all of the parameters that can be supplied to an LDAP search.
 The following parameters are supported:
 
-* `base`: Specifies the root DN in the LDAP tree where the search should start.
+* `base`: Specifies the root DN in the LDAP tree where the search should start. Several bases can be given, in which case the search is run against each of them in turn and the results are combined in that order.
 * `searchScope`: Specifies how deep into the LDAP tree the search should traverse.
 * `attributes`: Specifies the attributes to return from the search. The default is all.
 * `countLimit`: Specifies the maximum number of entries to return from the search.
@@ -29,6 +29,22 @@ import static org.springframework.ldap.query.LdapQueryBuilder.query;
 
 List<Person> persons = ldapClient.search()
       .query(query().where("objectclass").is("person"))
+      .map(new PersonAttributesMapper()).list();
+
+----
+
+The following query searches for all entries with an object class of `person` under either of two organizational units.
+The entries of `ou=users` come first, followed by those of `ou=sa`:
+
+.Search several bases for all entries with object class `person`
+[source,java]
+[subs="verbatim,quotes"]
+----
+import static org.springframework.ldap.query.LdapQueryBuilder.query;
+...
+
+List<Person> persons = ldapClient.search()
+      .query(query().base("ou=users", "ou=sa").where("objectclass").is("person"))
       .map(new PersonAttributesMapper()).list();
 
 ----

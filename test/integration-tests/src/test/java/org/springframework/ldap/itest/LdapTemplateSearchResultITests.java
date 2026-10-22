@@ -32,6 +32,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.ldap.NameNotFoundException;
 import org.springframework.ldap.SizeLimitExceededException;
+import org.springframework.ldap.core.AttributesMapper;
 import org.springframework.ldap.core.ContextMapper;
 import org.springframework.ldap.core.DirContextAdapter;
 import org.springframework.ldap.core.DirContextOperations;
@@ -102,6 +103,18 @@ public class LdapTemplateSearchResultITests extends AbstractLdapTemplateIntegrat
 		this.attributesMapper.setExpectedValues(ALL_VALUES);
 		List list = this.tested.search(BASE_STRING, FILTER_STRING, this.attributesMapper);
 		assertThat(list).hasSize(1);
+	}
+
+	@Test
+	public void testSearch_LdapQuery_MultipleBases() {
+		List<String> names = this.tested.search(LdapQueryBuilder.query()
+			.base("ou=company1,ou=Sweden", "ou=company2,ou=Sweden")
+			.where("objectclass")
+			.is("person"), (AttributesMapper<String>) (attributes) -> (String) attributes.get("cn").get());
+
+		assertThat(names).hasSize(4);
+		assertThat(names.subList(0, 3)).containsExactlyInAnyOrder("Some Person", "Some Person2", "Some Person3");
+		assertThat(names.get(3)).isEqualTo("Some Person");
 	}
 
 	@Test
