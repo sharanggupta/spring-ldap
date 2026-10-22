@@ -122,20 +122,20 @@ public final class LdapQueryBuilder implements LdapQuery {
 	}
 
 	/**
-	 * Set the base search path for the query. Default is
+	 * Set the base search path for the query, replacing any bases set before. Default is
 	 * {@link org.springframework.ldap.support.LdapUtils#emptyLdapName()}.
 	 * @param baseDn the base search path.
 	 * @return this instance.
 	 */
 	public LdapQueryBuilder base(String baseDn) {
-		assertFilterNotStarted();
-		this.bases = List.of(LdapUtils.newLdapName(baseDn));
-		return this;
+		return base(new String[] { baseDn });
 	}
 
 	/**
-	 * Set several base search paths for the query. The query is executed against each of
-	 * them in turn, and the results are combined in that order.
+	 * Set several base search paths for the query, replacing any bases set before. The
+	 * query is executed against each of them in turn, and the results are combined in
+	 * that order: an entry under more than one of the bases is returned once per base,
+	 * and the count and time limits apply to each base separately.
 	 * @param baseDns the base search paths.
 	 * @return this instance.
 	 * @since 4.2
@@ -148,20 +148,20 @@ public final class LdapQueryBuilder implements LdapQuery {
 	}
 
 	/**
-	 * Set the base search path for the query. Default is
+	 * Set the base search path for the query, replacing any bases set before. Default is
 	 * {@link org.springframework.ldap.support.LdapUtils#emptyLdapName()}.
 	 * @param baseDn the base search path.
 	 * @return this instance.
 	 */
 	public LdapQueryBuilder base(Name baseDn) {
-		assertFilterNotStarted();
-		this.bases = List.of(LdapUtils.newLdapName(baseDn));
-		return this;
+		return base(new Name[] { baseDn });
 	}
 
 	/**
-	 * Set several base search paths for the query. The query is executed against each of
-	 * them in turn, and the results are combined in that order.
+	 * Set several base search paths for the query, replacing any bases set before. The
+	 * query is executed against each of them in turn, and the results are combined in
+	 * that order: an entry under more than one of the bases is returned once per base,
+	 * and the count and time limits apply to each base separately.
 	 * @param baseDns the base search paths.
 	 * @return this instance.
 	 * @since 4.2
@@ -185,7 +185,8 @@ public final class LdapQueryBuilder implements LdapQuery {
 	}
 
 	/**
-	 * Set the count limit for the query. Default is 0 (no limit).
+	 * Set the count limit for the query. Default is 0 (no limit). When the query has
+	 * several bases, the limit applies to each base separately.
 	 * @param countLimit the count limit.
 	 * @return this instance.
 	 */
@@ -202,7 +203,8 @@ public final class LdapQueryBuilder implements LdapQuery {
 	}
 
 	/**
-	 * Set the time limit for the query. Default is 0 (no limit).
+	 * Set the time limit for the query. Default is 0 (no limit). When the query has
+	 * several bases, the limit applies to each base separately.
 	 * @param timeLimit the time limit.
 	 * @return this instance.
 	 */

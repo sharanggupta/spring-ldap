@@ -10,11 +10,11 @@ This section covers various how to use LDAP queries with Spring LDAP.
 The `LdapQueryBuilder` and its associated classes are intended to support all of the parameters that can be supplied to an LDAP search.
 The following parameters are supported:
 
-* `base`: Specifies the root DN in the LDAP tree where the search should start. Several bases can be given, in which case the search is run against each of them in turn and the results are combined in that order.
+* `base`: Specifies the root DN in the LDAP tree where the search should start. Several bases can be given, in which case the search is run against each of them in turn and the results are combined in that order; an entry under more than one of the bases is returned once per base.
 * `searchScope`: Specifies how deep into the LDAP tree the search should traverse.
 * `attributes`: Specifies the attributes to return from the search. The default is all.
-* `countLimit`: Specifies the maximum number of entries to return from the search.
-* `timeLimit`: Specifies the maximum time that the search may take.
+* `countLimit`: Specifies the maximum number of entries to return from the search (from each base, when several bases are given).
+* `timeLimit`: Specifies the maximum time that the search may take (for each base, when several bases are given).
 * Search filter: The conditions that the entries we are looking for must meet.
 
 An `LdapQueryBuilder` is created with a call to the `query` method of `LdapQueryBuilder`. It is intended as a fluent builder API, where the base parameters are defined first, followed by the filter specification calls. Once filter conditions have been started to be defined with a call to the `where` method of `LdapQueryBuilder`, later attempts to call (for example) `base` are rejected. The base search parameters are optional, but at least one filter specification call is required.

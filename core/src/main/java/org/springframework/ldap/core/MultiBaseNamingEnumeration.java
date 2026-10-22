@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.function.Consumer;
 
 import javax.naming.Name;
 import javax.naming.NamingEnumeration;
@@ -33,8 +34,14 @@ import org.springframework.util.Assert;
 
 /**
  * A {@link NamingEnumeration} over the results of the same search executed against
- * several search bases. The bases are searched up front, in order, while the context is
- * still available; the results are then returned one base after the other.
+ * several search bases. All bases are searched up front, in order, because the
+ * {@link javax.naming.directory.DirContext} is typically closed before the results are
+ * read; the results are then returned one base after the other. An entry that lies under
+ * several of the bases is returned once per base.
+ * <p>
+ * A {@link NamingException} raised by one base, while searching it or while reading its
+ * results, is passed to the exception handler. If the handler returns, the base is
+ * skipped and the remaining bases are still read; if it throws, nothing more is read.
  *
  * @author Sharang Gupta
  * @since 4.2
@@ -43,24 +50,32 @@ final class MultiBaseNamingEnumeration implements NamingEnumeration<SearchResult
 
 	private final Iterator<NamingEnumeration<SearchResult>> results;
 
+	private final Consumer<NamingException> exceptionHandler;
+
 	private @Nullable NamingEnumeration<SearchResult> current;
 
 	private boolean pending;
 
-	private MultiBaseNamingEnumeration(List<NamingEnumeration<SearchResult>> results) {
+	private MultiBaseNamingEnumeration(List<NamingEnumeration<SearchResult>> results,
+			Consumer<NamingException> exceptionHandler) {
 		this.results = results.iterator();
+		this.exceptionHandler = exceptionHandler;
 	}
 
 	/**
 	 * Execute the given search against the given bases. The results of a single base are
-	 * returned as they are; the results of several bases are returned one base after the
-	 * other, in the order of the bases.
+	 * returned as they are, with any exception propagated to the caller. The results of
+	 * several bases are returned one base after the other, in the order of the bases,
+	 * with exceptions passed to the given handler.
 	 * @param bases the search bases, in the order in which to search them
 	 * @param search the search to execute against a base
+	 * @param exceptionHandler handles the exception of one base, returning to skip the
+	 * base or throwing to give up
 	 * @return the results of all bases, in the order of the bases
-	 * @throws NamingException if searching a base fails
+	 * @throws NamingException if searching a single base fails
 	 */
-	static NamingEnumeration<SearchResult> search(List<Name> bases, Search search) throws NamingException {
+	static NamingEnumeration<SearchResult> search(List<Name> bases, Search search,
+			Consumer<NamingException> exceptionHandler) throws NamingException {
 		Assert.notEmpty(bases, "bases must not be empty");
 		if (bases.size() == 1) {
 			return search.apply(bases.get(0));
@@ -68,39 +83,58 @@ final class MultiBaseNamingEnumeration implements NamingEnumeration<SearchResult
 		List<NamingEnumeration<SearchResult>> results = new ArrayList<>(bases.size());
 		try {
 			for (Name base : bases) {
-				results.add(search.apply(base));
+				try {
+					results.add(search.apply(base));
+				}
+				catch (NamingException ex) {
+					exceptionHandler.accept(ex);
+				}
 			}
 		}
-		catch (NamingException | RuntimeException ex) {
+		catch (RuntimeException ex) {
 			closeAll(results);
 			throw ex;
 		}
-		return new MultiBaseNamingEnumeration(results);
+		return new MultiBaseNamingEnumeration(results, exceptionHandler);
 	}
 
-	private static void closeAll(List<NamingEnumeration<SearchResult>> results) {
+	private static void closeAll(Iterable<NamingEnumeration<SearchResult>> results) {
 		for (NamingEnumeration<SearchResult> result : results) {
-			try {
-				result.close();
-			}
-			catch (NamingException ex) {
-				// Never mind this.
-			}
+			closeQuietly(result);
+		}
+	}
+
+	private static void closeQuietly(NamingEnumeration<SearchResult> result) {
+		try {
+			result.close();
+		}
+		catch (NamingException ex) {
+			// Never mind this.
 		}
 	}
 
 	@Override
-	public boolean hasMore() throws NamingException {
+	public boolean hasMore() {
 		if (this.pending) {
 			return true;
 		}
 		while (true) {
 			if (this.current != null) {
-				if (this.current.hasMore()) {
+				boolean more;
+				try {
+					more = this.current.hasMore();
+				}
+				catch (NamingException ex) {
+					closeQuietly(this.current);
+					this.current = null;
+					this.exceptionHandler.accept(ex);
+					continue;
+				}
+				if (more) {
 					this.pending = true;
 					return true;
 				}
-				this.current.close();
+				closeQuietly(this.current);
 				this.current = null;
 			}
 			if (!this.results.hasNext()) {
@@ -121,12 +155,7 @@ final class MultiBaseNamingEnumeration implements NamingEnumeration<SearchResult
 
 	@Override
 	public boolean hasMoreElements() {
-		try {
-			return hasMore();
-		}
-		catch (NamingException ex) {
-			throw LdapUtils.convertLdapException(ex);
-		}
+		return hasMore();
 	}
 
 	@Override
@@ -140,15 +169,19 @@ final class MultiBaseNamingEnumeration implements NamingEnumeration<SearchResult
 	}
 
 	@Override
-	public void close() throws NamingException {
-		if (this.current != null) {
-			this.current.close();
-			this.current = null;
+	public void close() {
+		try {
+			if (this.current != null) {
+				closeQuietly(this.current);
+			}
 		}
-		this.pending = false;
-		List<NamingEnumeration<SearchResult>> remaining = new ArrayList<>();
-		this.results.forEachRemaining(remaining::add);
-		closeAll(remaining);
+		finally {
+			this.current = null;
+			this.pending = false;
+			List<NamingEnumeration<SearchResult>> remaining = new ArrayList<>();
+			this.results.forEachRemaining(remaining::add);
+			closeAll(remaining);
+		}
 	}
 
 	/**

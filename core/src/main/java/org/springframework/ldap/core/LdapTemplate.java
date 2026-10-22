@@ -1330,23 +1330,26 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 	public boolean authenticate(Name base, String filter, String password,
 			final AuthenticatedLdapEntryContextCallback callback, final AuthenticationErrorCallback errorCallback) {
 
-		return authenticate(base, filter, password,
+		return authenticate(List.of(base), filter, password,
 				getDefaultSearchControls(this.defaultSearchScope, RETURN_OBJ_FLAG, null), callback, errorCallback)
 			.isSuccess();
 	}
 
-	private AuthenticationStatus authenticate(Name base, String filter, String password, SearchControls searchControls,
-			final AuthenticatedLdapEntryContextCallback callback, final AuthenticationErrorCallback errorCallback) {
+	private AuthenticationStatus authenticate(List<Name> bases, String filter, String password,
+			SearchControls searchControls, final AuthenticatedLdapEntryContextCallback callback,
+			final AuthenticationErrorCallback errorCallback) {
 
-		List<LdapEntryIdentification> result = search(base, filter, searchControls,
-				new LdapEntryIdentificationContextMapper());
+		List<LdapEntryIdentification> result = new ArrayList<>();
+		for (Name base : bases) {
+			result.addAll(search(base, filter, searchControls, new LdapEntryIdentificationContextMapper()));
+		}
 		if (result.isEmpty()) {
-			String msg = "No results found for search, base: '" + base + "'; filter: '" + filter + "'.";
+			String msg = "No results found for search, bases: '" + bases + "'; filter: '" + filter + "'.";
 			LOG.info(msg);
 			return AuthenticationStatus.EMPTYRESULT;
 		}
 		else if (result.size() > 1) {
-			String msg = "base: '" + base + "'; filter: '" + filter + "'.";
+			String msg = "bases: '" + bases + "'; filter: '" + filter + "'.";
 			throw new IncorrectResultSizeDataAccessException(msg, 1, result.size());
 		}
 
@@ -1376,7 +1379,7 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 		ReturningAuthenticatedLdapEntryContext<T> mapperCallback = new ReturningAuthenticatedLdapEntryContext<>(mapper);
 		CollectingAuthenticationErrorCallback errorCallback = new CollectingAuthenticationErrorCallback();
 
-		AuthenticationStatus authenticationStatus = authenticate(query.base(), query.filter().encode(), password,
+		AuthenticationStatus authenticationStatus = authenticate(query.bases(), query.filter().encode(), password,
 				searchControls, mapperCallback, errorCallback);
 
 		if (errorCallback.hasError()) {
@@ -1578,7 +1581,8 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 
 		NamingEnumeration<SearchResult> results = unchecked(() -> {
 			LOG.debug("Executing search with bases [{}] and filter [{}]", bases, filter);
-			return MultiBaseNamingEnumeration.search(bases, (base) -> ctx.search(base, encodedFilter, searchControls));
+			return MultiBaseNamingEnumeration.search(bases, (base) -> ctx.search(base, encodedFilter, searchControls),
+					this::handleNamingException);
 		});
 		if (results == null) {
 			closeContextAndNamingEnumeration(ctx, null);
@@ -1817,30 +1821,40 @@ public class LdapTemplate implements LdapOperations, InitializingBean {
 		try {
 			return supplier.get();
 		}
-		catch (NameNotFoundException ex) {
+		catch (javax.naming.NamingException ex) {
+			handleNamingException(ex);
+		}
+		return null;
+	}
+
+	/**
+	 * Ignore the given exception if it is of a kind this template is configured to
+	 * ignore, or throw its {@link NamingException Spring LDAP counterpart} otherwise.
+	 */
+	private void handleNamingException(javax.naming.NamingException ex) {
+		if (ex instanceof NameNotFoundException) {
 			// It is possible to ignore errors caused by base not found
 			if (!this.ignoreNameNotFoundException) {
 				throw LdapUtils.convertLdapException(ex);
 			}
 			LOG.warn("Base context not found, ignoring: {}", ex.getMessage());
 		}
-		catch (PartialResultException ex) {
+		else if (ex instanceof PartialResultException) {
 			// Workaround for AD servers not handling referrals correctly.
 			if (!this.ignorePartialResultException) {
 				throw LdapUtils.convertLdapException(ex);
 			}
 			LOG.debug("PartialResultException encountered and ignored", ex);
 		}
-		catch (SizeLimitExceededException ex) {
+		else if (ex instanceof SizeLimitExceededException) {
 			if (!this.ignoreSizeLimitExceededException) {
 				throw LdapUtils.convertLdapException(ex);
 			}
 			LOG.debug("SizeLimitExceededException encountered and ignored", ex);
 		}
-		catch (javax.naming.NamingException ex) {
+		else {
 			throw LdapUtils.convertLdapException(ex);
 		}
-		return null;
 	}
 
 	private interface CheckedSupplier<T> {

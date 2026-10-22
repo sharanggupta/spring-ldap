@@ -43,14 +43,17 @@ public interface LdapQuery {
 
 	/**
 	 * Get the search base. Default is
-	 * {@link org.springframework.ldap.support.LdapUtils#emptyLdapName()}.
+	 * {@link org.springframework.ldap.support.LdapUtils#emptyLdapName()}. When the query
+	 * has several {@link #bases() bases}, this is the first of them.
 	 * @return the search base.
 	 */
 	Name base();
 
 	/**
 	 * Get the search bases. The query is executed against each of them in turn, and the
-	 * results are combined in that order. By default, this is the single {@link #base()}.
+	 * results are combined in that order: an entry under more than one of the bases is
+	 * returned once per base, and the count and time limits apply to each base
+	 * separately. By default, this is the single {@link #base()}.
 	 * @return the search bases, never empty.
 	 * @since 4.2
 	 */

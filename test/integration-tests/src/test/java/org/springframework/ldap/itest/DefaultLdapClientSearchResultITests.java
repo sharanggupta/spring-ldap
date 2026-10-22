@@ -29,7 +29,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.ldap.NameNotFoundException;
 import org.springframework.ldap.SizeLimitExceededException;
-import org.springframework.ldap.core.AttributesMapper;
 import org.springframework.ldap.core.ContextMapper;
 import org.springframework.ldap.core.DirContextAdapter;
 import org.springframework.ldap.core.DirContextOperations;
@@ -101,13 +100,14 @@ public class DefaultLdapClientSearchResultITests extends AbstractLdapTemplateInt
 			.where("objectclass")
 			.is("person");
 
-		List<String> names = this.tested.search()
+		List<String> dns = this.tested.search()
 			.query(query)
-			.toList((AttributesMapper<String>) (attributes) -> (String) attributes.get("cn").get());
+			.toList((ContextMapper<String>) (ctx) -> ((DirContextOperations) ctx).getDn().toString());
 
-		assertThat(names).hasSize(4);
-		assertThat(names.subList(0, 3)).containsExactlyInAnyOrder("Some Person", "Some Person2", "Some Person3");
-		assertThat(names.get(3)).isEqualTo("Some Person");
+		assertThat(dns).hasSize(4);
+		assertThat(dns.subList(0, 3)).containsExactlyInAnyOrder("cn=Some Person,ou=company1,ou=Sweden",
+				"cn=Some Person2,ou=company1,ou=Sweden", "cn=Some Person3,ou=company1,ou=Sweden");
+		assertThat(dns.get(3)).isEqualTo("cn=Some Person,ou=company2,ou=Sweden");
 	}
 
 	@Test

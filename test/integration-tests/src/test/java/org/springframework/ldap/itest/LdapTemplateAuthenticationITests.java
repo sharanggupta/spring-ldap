@@ -52,6 +52,16 @@ public class LdapTemplateAuthenticationITests extends AbstractLdapTemplateIntegr
 	private LdapTemplate tested;
 
 	@Test
+	public void testAuthenticateWithLdapQueryInSeveralBases() {
+		this.tested.authenticate(LdapQueryBuilder.query()
+			.base("ou=company2,ou=Sweden", "ou=company1,ou=Sweden")
+			.where("objectclass")
+			.is("person")
+			.and("uid")
+			.is("some.person3"), "password");
+	}
+
+	@Test
 	@NoAdTests
 	public void testAuthenticate() {
 		AndFilter filter = new AndFilter();
